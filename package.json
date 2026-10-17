@@ -3,12 +3,21 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun --watch index.ts",
+    "start": "bun run index.ts",
+    "start:api": "bun run backend.ts",
+    "start:tracker": "bun run priceTracker.ts",
+    "db:generate": "bunx prisma generate",
+    "db:migrate:deploy": "bunx prisma migrate deploy",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
   },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
+  "peerDependencies": {},
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^1.2.0",
     "@prisma/client": "^6.18.0",
@@ -16,6 +25,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "prisma": "^6.18.0",
-    "recharts": "^3.3.0"
+    "recharts": "^3.3.0",
+    "zod": "^4.1.12"
   }
 }
