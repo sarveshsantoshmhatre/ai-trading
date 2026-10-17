@@ -210,12 +210,39 @@ async function main() {
   validateRiskConfiguration();
   const mode = getTradingMode();
   if (mode === "live") assertLiveTradingAuthorized();
-  const models = await prisma.models.findMany();
+  if (mode === "paper") {
+    // Do not even select the secret column in paper mode.
+    const models = await prisma.models.findMany({
+      select: { id: true, name: true, openRoutermodelName: true, invocationCount: true, accountIndex: true },
+    });
+    for (const model of models) {
+      try {
+        await invokeAgent({
+          apiKey: "",
+          modelName: model.openRoutermodelName,
+          name: model.name,
+          invocationCount: model.invocationCount,
+          id: model.id,
+          accountIndex: model.accountIndex,
+        });
+      } catch (error) {
+        console.error("Paper cycle failed for model " + model.name + ":", error);
+      }
+    }
+    return;
+  }
+
+  // Only the explicitly authorized live path selects and decrypts exchange credentials.
+  const models = await prisma.models.findMany({
+    select: {
+      id: true, name: true, openRoutermodelName: true, invocationCount: true,
+      accountIndex: true, lighterApiKey: true,
+    },
+  });
   for (const model of models) {
     try {
       await invokeAgent({
-        // Paper mode never decrypts or uses stored exchange credentials.
-        apiKey: mode === "paper" ? "" : decryptSecret(model.lighterApiKey),
+        apiKey: decryptSecret(model.lighterApiKey),
         modelName: model.openRoutermodelName,
         name: model.name,
         invocationCount: model.invocationCount,
