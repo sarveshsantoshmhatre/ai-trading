@@ -10,6 +10,7 @@
     "start:tracker": "bun run priceTracker.ts",
     "db:generate": "bunx prisma generate",
     "db:migrate:deploy": "bunx prisma migrate deploy",
+    "secrets:encrypt": "bun run scripts/encrypt-credentials.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test"
   },
