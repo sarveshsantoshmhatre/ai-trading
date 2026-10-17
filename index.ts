@@ -5,11 +5,20 @@ import { PROMPT } from "./prompt";
 import { type Account } from "./accounts";
 import { getIndicators } from "./stockData";
 import { getOpenPositions } from "./openPositions";
+import { getPortfolio } from "./getPortfolio";
 import { MARKETS } from "./markets";
-import { createPosition } from "./createPosition";
-import { cancelAllOrders } from "./cancelOrder";
 import { PrismaClient, ToolCallType } from "./generated/prisma/client";
 import { decryptSecret } from "./credentialCrypto";
+import {
+  assertLiveTradingAuthorized,
+  closePaperPosition,
+  getPaperOpenPositions,
+  getPaperPortfolio,
+  getTradingMode,
+  isLiveTradingAuthorized,
+  isPaperMode,
+  openPaperPosition,
+} from "./paperTrading";
 
 const prisma = new PrismaClient();
 const MAX_POSITION_NOTIONAL_USD = Number(process.env.MAX_POSITION_NOTIONAL_USD ?? "100");
@@ -29,28 +38,43 @@ export const invokeAgent = async (account: Account) => {
   if (!openRouterApiKey) throw new Error("OPENROUTER_API_KEY is required");
   const openrouter = createOpenRouter({ apiKey: openRouterApiKey });
 
-  const marketBlocks = await Promise.all(Object.keys(MARKETS).map(async (marketSlug) => {
+  const marketData = await Promise.all(Object.keys(MARKETS).map(async (marketSlug) => {
     const market = MARKETS[marketSlug as keyof typeof MARKETS];
     const [intraday, longTerm] = await Promise.all([
       getIndicators("5m", market.marketId),
       getIndicators("4h", market.marketId),
     ]);
-    return [
-      "MARKET - " + marketSlug,
-      "Intraday (5m candles; oldest to newest):",
-      "Mid prices - [" + intraday.midPrices.join(",") + "]",
-      "EMA20 - [" + intraday.ema20s.join(",") + "]",
-      "MACD - [" + intraday.macd.join(",") + "]",
-      "Long term (4h candles; oldest to newest):",
-      "Mid prices - [" + longTerm.midPrices.join(",") + "]",
-      "EMA20 - [" + longTerm.ema20s.join(",") + "]",
-      "MACD - [" + longTerm.macd.join(",") + "]",
-    ].join("\n");
+    const latestPrice = Number(intraday.midPrices.at(-1));
+    if (!Number.isFinite(latestPrice) || latestPrice <= 0) {
+      throw new Error("Missing valid mark price for " + marketSlug);
+    }
+    return {
+      symbol: marketSlug,
+      latestPrice,
+      block: [
+        "MARKET - " + marketSlug,
+        "Intraday (5m candles; oldest to newest):",
+        "Mid prices - [" + intraday.midPrices.join(",") + "]",
+        "EMA20 - [" + intraday.ema20s.join(",") + "]",
+        "MACD - [" + intraday.macd.join(",") + "]",
+        "Long term (4h candles; oldest to newest):",
+        "Mid prices - [" + longTerm.midPrices.join(",") + "]",
+        "EMA20 - [" + longTerm.ema20s.join(",") + "]",
+        "MACD - [" + longTerm.macd.join(",") + "]",
+      ].join("\n"),
+    };
   }));
-  const allIndicatorData = marketBlocks.join("\n\n");
+  const allIndicatorData = marketData.map((item) => item.block).join("\n\n");
+  const latestPrices: Record<string, number> = Object.fromEntries(
+    marketData.map((item) => [item.symbol, item.latestPrice]),
+  );
 
-  const portfolio = await getPortfolio(account);
-  const openPositions = await getOpenPositions(account.apiKey, account.accountIndex);
+  const portfolio = isPaperMode()
+    ? await getPaperPortfolio(prisma, account.id, latestPrices)
+    : await getPortfolio(account);
+  const openPositions = isPaperMode()
+    ? await getPaperOpenPositions(prisma, account.id)
+    : await getOpenPositions(account.apiKey, account.accountIndex);
   const modelInvocation = await prisma.invocations.create({
     data: { modelId: account.id, response: "" },
   });
@@ -79,10 +103,26 @@ export const invokeAgent = async (account: Account) => {
           if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_ORDER_QUANTITY) {
             throw new Error("Quantity must be > 0 and <= " + MAX_ORDER_QUANTITY);
           }
-          const currentPositions = await getOpenPositions(account.apiKey, account.accountIndex);
-          if (currentPositions?.some((position) => Number(position.position) !== 0)) {
+          const currentPositions = isPaperMode()
+            ? await getPaperOpenPositions(prisma, account.id)
+            : await getOpenPositions(account.apiKey, account.accountIndex);
+          if (currentPositions.some((position) => Number(position.position) !== 0)) {
             throw new Error("An open position already exists. Close and reconcile it before opening another.");
           }
+          if (isPaperMode()) {
+            return await openPaperPosition({
+              prisma,
+              invocationId: modelInvocation.id,
+              modelId: account.id,
+              symbol,
+              side,
+              quantity,
+              markPrice: latestPrices[symbol],
+              maxNotionalUsd: MAX_POSITION_NOTIONAL_USD,
+            });
+          }
+          assertLiveTradingAuthorized();
+          const { createPosition } = await import("./createPosition");
           const orderResponse = await createPosition(account, symbol, side, quantity, {
             maxNotionalUsd: MAX_POSITION_NOTIONAL_USD,
           });
@@ -116,12 +156,22 @@ export const invokeAgent = async (account: Account) => {
         description: "Close all open positions and verify the account is flat",
         inputSchema: z.object({}),
         execute: async () => {
+          if (isPaperMode()) {
+            return await closePaperPosition({
+              prisma,
+              invocationId: modelInvocation.id,
+              modelId: account.id,
+              markPrices: latestPrices,
+            });
+          }
+          assertLiveTradingAuthorized();
+          const { cancelAllOrders } = await import("./cancelOrder");
           await cancelAllOrders(account);
           await prisma.toolCalls.create({
             data: {
               invocationId: modelInvocation.id,
               toolCallType: ToolCallType.CLOSE_POSITION,
-              metadata: JSON.stringify({ verified: true }),
+              metadata: JSON.stringify({ verified: true, paper: false }),
             },
           });
           return "Close orders submitted and the account was verified flat.";
@@ -154,11 +204,14 @@ export const invokeAgent = async (account: Account) => {
 
 async function main() {
   validateRiskConfiguration();
+  const mode = getTradingMode();
+  if (mode === "live") assertLiveTradingAuthorized();
   const models = await prisma.models.findMany();
   for (const model of models) {
     try {
       await invokeAgent({
-        apiKey: decryptSecret(model.lighterApiKey),
+        // Paper mode never decrypts or uses stored exchange credentials.
+        apiKey: mode === "paper" ? "" : decryptSecret(model.lighterApiKey),
         modelName: model.openRoutermodelName,
         name: model.name,
         invocationCount: model.invocationCount,
@@ -172,13 +225,18 @@ async function main() {
 }
 
 async function runTradingLoop() {
-  const intervalMs = Math.max(60_000, Number(process.env.TRADING_INTERVAL_MS ?? "300000"));
-  if (process.env.TRADING_ENABLED !== "true") {
-    console.warn("TRADING_ENABLED is not true. The trading engine will remain idle and will not submit orders.");
+  const mode = getTradingMode();
+  // Paper runs hourly by default to limit third-party model API usage.
+  const defaultIntervalMs = mode === "paper" ? "3600000" : "300000";
+  const intervalMs = Math.max(60_000, Number(process.env.TRADING_INTERVAL_MS ?? defaultIntervalMs));
+  if (mode === "paper") {
+    console.warn("PAPER MODE is active. Positions are simulated in the database; no exchange orders can be sent.");
+  } else if (!isLiveTradingAuthorized()) {
+    console.error("Live mode is configured but not authorized. The engine will remain idle.");
   }
   while (true) {
     const startedAt = Date.now();
-    if (process.env.TRADING_ENABLED === "true") {
+    if (mode === "paper" || isLiveTradingAuthorized()) {
       try {
         await main();
       } catch (error) {
