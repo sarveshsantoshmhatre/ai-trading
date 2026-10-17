@@ -59,8 +59,13 @@ export async function cancelAllOrders(account: Account) {
     });
   }
 
-  const remaining = await getOpenPositions(account.apiKey, account.accountIndex);
-  const stillOpen = (remaining ?? []).filter((position) => Number(position.position) !== 0);
+  let stillOpen = (await getOpenPositions(account.apiKey, account.accountIndex) ?? [])
+    .filter((position) => Number(position.position) !== 0);
+  for (let attempt = 0; stillOpen.length > 0 && attempt < 4; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    stillOpen = (await getOpenPositions(account.apiKey, account.accountIndex) ?? [])
+      .filter((position) => Number(position.position) !== 0);
+  }
   if (stillOpen.length > 0) {
     throw new Error("Close not verified; positions remain open: " +
       stillOpen.map((position) => position.symbol + "=" + position.position).join(", "));
