@@ -1,5 +1,5 @@
 import { PrismaClient } from "../generated/prisma/client";
-import { encryptSecret, isEncryptedSecret } from "../credentialCrypto";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "../credentialCrypto";
 
 const prisma = new PrismaClient();
 
@@ -11,7 +11,11 @@ async function main() {
   });
   let migrated = 0;
   for (const model of models) {
-    if (isEncryptedSecret(model.lighterApiKey)) continue;
+    if (isEncryptedSecret(model.lighterApiKey)) {
+      // Verify that the configured key can decrypt existing ciphertext before skipping it.
+      decryptSecret(model.lighterApiKey);
+      continue;
+    }
     await prisma.models.update({
       where: { id: model.id },
       data: { lighterApiKey: encryptSecret(model.lighterApiKey) },
