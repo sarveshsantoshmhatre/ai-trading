@@ -26,6 +26,7 @@ Configure environment variables before starting any service:
 - `MAX_ORDER_QUANTITY`: maximum base quantity per order; defaults to 1.
 - `MAX_ORDER_SLIPPAGE_FRACTION`: allowed price offset for IOC orders; defaults to 0.01 and must be at most 0.05.
 - `TRADING_INTERVAL_MS`: minimum time between trading cycles; defaults to 300000.
+- `CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte key used to encrypt exchange credentials at rest. Generate with `openssl rand -base64 32` and store it outside the database.
 - `DASHBOARD_PASSWORD`: password for the private dashboard.
 - `DASHBOARD_SESSION_SECRET`: random secret of at least 32 characters used to sign sessions.
 - `DASHBOARD_ALLOWED_ORIGINS`: comma-separated exact frontend origins; defaults to http://localhost:5173.
@@ -33,6 +34,16 @@ Configure environment variables before starting any service:
 - `VITE_BACKEND_URL`: dashboard API base URL; defaults to http://localhost:3000.
 
 Generate a session secret with `openssl rand -base64 48`. Use a strong, unique dashboard password. In production, serve the frontend and API over HTTPS and configure exact allowed origins.
+
+## Encrypt existing exchange credentials
+
+Before starting the trading engine after deploying this change, configure `CREDENTIAL_ENCRYPTION_KEY` and run:
+
+```bash
+bun run secrets:encrypt
+```
+
+Back up the database first. The migration is idempotent: already encrypted credentials are skipped. Keep the encryption key backed up separately; losing it makes encrypted exchange credentials unrecoverable. Runtime trading refuses to use credentials that have not been encrypted.
 
 ## Run
 
