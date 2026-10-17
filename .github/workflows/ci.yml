@@ -39,7 +39,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Lint frontend
         working-directory: frontend
-        run: bun run lint -- --rule '@typescript-eslint/no-explicit-any: off'
+        run: "bun run lint -- --rule '@typescript-eslint/no-explicit-any: off'"
       - name: Build frontend
         working-directory: frontend
         run: bun run build
