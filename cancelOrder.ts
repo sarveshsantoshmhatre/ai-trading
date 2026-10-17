@@ -7,41 +7,62 @@ import { getOpenPositions } from "./openPositions";
 import { CandlestickApi, IsomorphicFetchHttpLibrary, ServerConfiguration } from "./lighter-sdk-ts/generated";
 
 export async function cancelAllOrders(account: Account) {
-    const client = await SignerClient.create({
-        url: BASE_URL,
-        privateKey: account.apiKey,
-        apiKeyIndex: API_KEY_INDEX,
-        accountIndex: Number(account.accountIndex),
-        nonceManagementType: NonceManagerType.API
+  const client = await SignerClient.create({
+    url: BASE_URL,
+    privateKey: account.apiKey,
+    apiKeyIndex: API_KEY_INDEX,
+    accountIndex: Number(account.accountIndex),
+    nonceManagementType: NonceManagerType.API,
+  });
+  const candleStickApi = new CandlestickApi({
+    baseServer: new ServerConfiguration<{}>(BASE_URL, {}),
+    httpApi: new IsomorphicFetchHttpLibrary(),
+    middleware: [],
+    authMethods: {},
+  });
+  const openPositions = await getOpenPositions(account.apiKey, account.accountIndex);
+
+  for (const position of openPositions ?? []) {
+    const size = Math.abs(Number(position.position));
+    if (!Number.isFinite(size)) throw new Error("Invalid position size for " + position.symbol);
+    if (size === 0) continue;
+    const market = MARKETS[position.symbol as keyof typeof MARKETS];
+    if (!market) throw new Error("Unsupported open market: " + position.symbol);
+
+    const candleData = await candleStickApi.candlesticks(
+      market.marketId, "1m", Date.now() - 5 * 60_000, Date.now(), 1, false,
+    );
+    const latestPrice = Number(candleData.candlesticks.at(-1)?.close);
+    if (!Number.isFinite(latestPrice) || latestPrice <= 0) {
+      throw new Error("No valid latest price for " + position.symbol + "; refusing to submit close order");
+    }
+    const closingSide = position.sign === "LONG" ? "SHORT" : "LONG";
+    const slippageFraction = Number(process.env.MAX_ORDER_SLIPPAGE_FRACTION ?? "0.01");
+    if (!Number.isFinite(slippageFraction) || slippageFraction <= 0 || slippageFraction > 0.05) {
+      throw new Error("MAX_ORDER_SLIPPAGE_FRACTION must be > 0 and <= 0.05");
+    }
+    const limitPrice = closingSide === "LONG"
+      ? latestPrice * (1 + slippageFraction)
+      : latestPrice * (1 - slippageFraction);
+
+    await client.createOrder({
+      marketIndex: market.marketId,
+      clientOrderIndex: market.clientOrderIndex,
+      baseAmount: Math.round(size * market.qtyDecimals),
+      price: Math.round(limitPrice * market.priceDecimals),
+      isAsk: closingSide === "SHORT",
+      orderType: SignerClient.ORDER_TYPE_MARKET,
+      timeInForce: SignerClient.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
+      reduceOnly: 1,
+      triggerPrice: SignerClient.NIL_TRIGGER_PRICE,
+      orderExpiry: SignerClient.DEFAULT_IOC_EXPIRY,
     });
-    const candleStickApi = new CandlestickApi({
-        baseServer: new ServerConfiguration<{  }>(BASE_URL, {  }),
-        httpApi: new IsomorphicFetchHttpLibrary(),
-        middleware: [],
-        authMethods: {}
-    }); 
-    const openPositions = await getOpenPositions(account.apiKey, account.accountIndex);
-    openPositions?.forEach(async ({position, sign, symbol}) => {
-        if (Number(position) != 0) {
-            const candleStickData = await candleStickApi.candlesticks(MARKETS[symbol as keyof typeof MARKETS].marketId, '1m', Date.now() - 1000 * 60 * 5, Date.now(), 1, false);
-            const latestPrice = candleStickData.candlesticks[candleStickData.candlesticks.length - 1]?.close;
-            if (!latestPrice) {
-                throw new Error("No latest price found");
-            }
-            sign = sign == "LONG" ? "SHORT" : "LONG";
-            // create opposite order to close the position
-            await client.createOrder({
-                marketIndex: MARKETS[symbol as keyof typeof MARKETS].marketId,
-                clientOrderIndex: MARKETS[symbol as keyof typeof MARKETS].clientOrderIndex,
-                baseAmount: Math.abs(Number(position)) * MARKETS[symbol as keyof typeof MARKETS].qtyDecimals,
-                price: (sign == "LONG" ? latestPrice * 1.01 : latestPrice * 0.99) * MARKETS[symbol as keyof typeof MARKETS].priceDecimals,
-                isAsk: sign === "LONG" ? false : true,
-                orderType: SignerClient.ORDER_TYPE_MARKET,
-                timeInForce: SignerClient.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
-                reduceOnly: 0,
-                triggerPrice: SignerClient.NIL_TRIGGER_PRICE,
-                orderExpiry: SignerClient.DEFAULT_IOC_EXPIRY,
-            });
-        }
-    });
+  }
+
+  const remaining = await getOpenPositions(account.apiKey, account.accountIndex);
+  const stillOpen = (remaining ?? []).filter((position) => Number(position.position) !== 0);
+  if (stillOpen.length > 0) {
+    throw new Error("Close not verified; positions remain open: " +
+      stillOpen.map((position) => position.symbol + "=" + position.position).join(", "));
+  }
 }
