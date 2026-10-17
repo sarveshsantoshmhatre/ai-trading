@@ -3,6 +3,7 @@ import { NonceManagerType } from "./lighter-sdk-ts/nonce_manager";
 import { SignerClient } from "./lighter-sdk-ts/signer";
 import type { Account } from "./accounts";
 import { MARKETS } from "./markets";
+import { nextClientOrderIndex } from "./orderIndex";
 import { getOpenPositions } from "./openPositions";
 import { CandlestickApi, IsomorphicFetchHttpLibrary, ServerConfiguration } from "./lighter-sdk-ts/generated";
 
@@ -47,7 +48,7 @@ export async function cancelAllOrders(account: Account) {
 
     await client.createOrder({
       marketIndex: market.marketId,
-      clientOrderIndex: market.clientOrderIndex,
+      clientOrderIndex: nextClientOrderIndex(),
       baseAmount: Math.round(size * market.qtyDecimals),
       price: Math.round(limitPrice * market.priceDecimals),
       isAsk: closingSide === "SHORT",
