@@ -26,11 +26,16 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Generate Prisma client
         run: bun run db:generate
+      - name: Typecheck backend and trading engine
+        run: bun run typecheck
       - name: Run unit tests
         run: bun run test
       - name: Install frontend dependencies
         working-directory: frontend
-        run: bun install
+        run: bun install --frozen-lockfile
+      - name: Lint frontend
+        working-directory: frontend
+        run: bun run lint
       - name: Build frontend
         working-directory: frontend
         run: bun run build
