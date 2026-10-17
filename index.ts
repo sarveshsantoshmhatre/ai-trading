@@ -173,12 +173,17 @@ async function main() {
 
 async function runTradingLoop() {
   const intervalMs = Math.max(60_000, Number(process.env.TRADING_INTERVAL_MS ?? "300000"));
+  if (process.env.TRADING_ENABLED !== "true") {
+    console.warn("TRADING_ENABLED is not true. The trading engine will remain idle and will not submit orders.");
+  }
   while (true) {
     const startedAt = Date.now();
-    try {
-      await main();
-    } catch (error) {
-      console.error("Trading loop failed:", error);
+    if (process.env.TRADING_ENABLED === "true") {
+      try {
+        await main();
+      } catch (error) {
+        console.error("Trading loop failed:", error);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, intervalMs - (Date.now() - startedAt))));
   }
