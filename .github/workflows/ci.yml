@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ai_trading_ci
+      CREDENTIAL_ENCRYPTION_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      OPENROUTER_API_KEY: ci-placeholder
+      DASHBOARD_PASSWORD: ci-placeholder
+      DASHBOARD_SESSION_SECRET: ci-session-secret-that-is-long-enough-for-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install root dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bun run db:generate
+      - name: Run unit tests
+        run: bun run test
+      - name: Typecheck application
+        run: bun run typecheck
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install
+      - name: Build frontend
+        working-directory: frontend
+        run: bun run build
