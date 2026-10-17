@@ -1,5 +1,7 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
+# Prisma config reads DATABASE_URL during client generation; no live database is accessed here.
+ENV DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build
 
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
@@ -17,6 +19,6 @@ ENV TRADING_MODE=paper
 ENV TRADING_ENABLED=false
 EXPOSE 3000
 
-# Railway's dashboard/API service uses the default command. Override the start
-# command to "bun run start" only for a separate paper-engine service.
+# One free web service hosts the dashboard and API. The paper engine runs as a
+# scheduled, one-shot GitHub Actions job instead of an always-on worker.
 CMD ["bun", "run", "start:api"]
