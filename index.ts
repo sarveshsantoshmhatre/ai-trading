@@ -92,8 +92,23 @@ export const invokeAgent = async (account: Account) => {
               metadata: JSON.stringify({ symbol, side, quantity, orderResponse }),
             },
           });
-          return "Order submitted for " + quantity + " " + symbol + " " + side +
-            ". The exchange response is recorded; do not assume a full fill until reconciled.";
+
+          // IOC submission is not a fill guarantee. Poll exchange position state
+          // and fail closed if no position matching this order becomes visible.
+          let observedPosition: { position: string; sign: string } | undefined;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+            const positions = await getOpenPositions(account.apiKey, account.accountIndex);
+            observedPosition = positions?.find((position) =>
+              position.symbol === symbol && Number(position.position) > 0 && position.sign === side
+            );
+            if (observedPosition) break;
+          }
+          if (!observedPosition) {
+            throw new Error("Order was submitted but no matching open position was observed. Reconcile exchange state before retrying.");
+          }
+          return "Verified " + side + " position in " + symbol + "; observed size " +
+            observedPosition.position + ". Requested size was " + quantity + ". Check for partial fills.";
         },
       },
       closeAllPosition: {
