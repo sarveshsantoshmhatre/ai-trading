@@ -8,7 +8,10 @@ const prisma = new PrismaClient();
 const TRACK_INTERVAL_MS = Math.max(60_000, Number(process.env.PORTFOLIO_TRACK_INTERVAL_MS ?? "120000"));
 
 async function trackPortfolioOnce() {
-  const models = await prisma.models.findMany();
+  // The tracker never needs API keys; exclude credential columns from all queries.
+  const models = await prisma.models.findMany({
+    select: { id: true, name: true, openRoutermodelName: true, invocationCount: true, accountIndex: true },
+  });
   const paperMode = isPaperMode();
   let paperPrices: Record<string, number> = {};
 
