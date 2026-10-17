@@ -3,7 +3,8 @@ import PerformanceChart from "./components/PerformanceChart";
 import RecentInvocations from "./components/RecentInvocations";
 import Navbar from "./components/Navbar";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3000";
+// Empty means same-origin deployment; local development can set VITE_BACKEND_URL explicitly.
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/$/, "");
 
 type ModelInfo = { id: string; name: string; openRoutermodelName: string; invocationCount: number };
 
