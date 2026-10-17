@@ -25,11 +25,11 @@ jobs:
         run: bun run db:generate
       - name: Run unit tests
         run: bun run test
-      - name: Typecheck application
-        run: bun run typecheck
       - name: Install frontend dependencies
         working-directory: frontend
         run: bun install
+      - name: Typecheck application
+        run: bun run typecheck
       - name: Build frontend
         working-directory: frontend
         run: bun run build
