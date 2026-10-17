@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import express from "express";
-import { PrismaClient, type PortfolioSize } from "./generated/prisma/client";
+import { PrismaClient } from "./generated/prisma/client";
 import cors from "cors";
 
 const prisma = new PrismaClient();
@@ -100,36 +100,6 @@ app.post("/auth/logout", (req, res) => {
 });
 
 app.get("/auth/me", requireAuth, (_req, res) => res.json({ authenticated: true }));
-
-let timeseriesDataGlobal: PortfolioSize[] = [];
-let lastUpdatedGlobal: Date | null = null;
-let invocationsCacheGlobal: any[] = [];
-let invocationsLastUpdatedGlobal: Date | null = null;
-let invocationsRefreshInFlight = false;
-
-async function refreshInvocations(take: number) {
-  if (invocationsRefreshInFlight) return;
-  invocationsRefreshInFlight = true;
-  try {
-    const safeTake = Math.min(Math.max(take || 30, 1), 200);
-    invocationsCacheGlobal = await prisma.invocations.findMany({
-      orderBy: { createdAt: "desc" },
-      take: safeTake,
-      include: {
-        model: { select: { name: true } },
-        toolCalls: {
-          select: { toolCallType: true, metadata: true, createdAt: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-    invocationsLastUpdatedGlobal = new Date();
-  } catch (error) {
-    console.error("Error refreshing invocations:", error);
-  } finally {
-    invocationsRefreshInFlight = false;
-  }
-}
 
 app.get("/performance", requireAuth, async (_req, res) => {
   try {
