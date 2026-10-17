@@ -6,7 +6,7 @@ setInterval(async () => {
     const models = await prisma.models.findMany();
     for (const model of models) {
         const portfolio = await getPortfolio({
-            apiKey: model.lighterApiKey,
+            apiKey: "", // getPortfolio uses only accountIndex; do not load the trading secret here.
             modelName: model.openRoutermodelName,
             name: model.name,
             invocationCount: model.invocationCount,
