@@ -1,4 +1,3 @@
-import axios, { AxiosError } from 'axios';
 import { ValidationError, NonceError } from './errors';
 
 export async function getNonceFromApi(
@@ -7,23 +6,21 @@ export async function getNonceFromApi(
     apiKeyIndex: number
 ): Promise<number> {
     try {
-        const response = await axios.get<{ nonce: number }>(
-            `${host}/api/v1/nextNonce`,
-            {
-                params: {
-                    account_index: accountIndex,
-                    api_key_index: apiKeyIndex
-                }
-            }
-        );
-
-        if (response.status !== 200) {
-            throw new NonceError(`Couldn't get nonce: ${response.statusText}`);
+        const url = new URL(`${host.replace(/\\/$/, '')}/api/v1/nextNonce`);
+        url.searchParams.set('account_index', String(accountIndex));
+        url.searchParams.set('api_key_index', String(apiKeyIndex));
+        const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        if (!response.ok) {
+            throw new NonceError(`Couldn't get nonce: HTTP ${response.status}`);
         }
-
-        return response.data.nonce;
+        const payload = await response.json() as { nonce?: unknown };
+        const nonce = Number(payload.nonce);
+        if (!Number.isSafeInteger(nonce) || nonce < 0) {
+            throw new NonceError('Nonce API returned an invalid nonce');
+        }
+        return nonce;
     } catch (error) {
-        if (error instanceof AxiosError) {
+        if (error instanceof Error) {
             throw new NonceError(`Couldn't get nonce: ${error.message}`);
         }
         throw error;
@@ -113,8 +110,9 @@ export class OptimisticNonceManager extends NonceManager {
             this.startApiKey,
             this.endApiKey
         );
-        this.nonce[this.currentApiKey] += 1;
-        return [this.currentApiKey, this.nonce[this.currentApiKey]];
+        const next = (this.nonce[this.currentApiKey] ?? 0) + 1;
+        this.nonce[this.currentApiKey] = next;
+        return [this.currentApiKey, next];
     }
 
     acknowledgeFailure(apiKeyIndex: number): void {
@@ -127,11 +125,11 @@ export class OptimisticNonceManager extends NonceManager {
 export class ApiNonceManager extends NonceManager {
     constructor(
         accountIndex: number,
-        apiClient: ApiClient,
+        host: string,
         startApiKey: number,
         endApiKey: number | null = null
     ) {
-        super(accountIndex, apiClient, startApiKey, endApiKey);
+        super(accountIndex, host, startApiKey, endApiKey);
     }
 
     async initialize(): Promise<void> {
