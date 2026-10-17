@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import PerformanceChart from "./components/PerformanceChart";
 import RecentInvocations from "./components/RecentInvocations";
 import Navbar from "./components/Navbar";
@@ -63,7 +63,7 @@ export default function App() {
     return () => { if (interval) clearInterval(interval); };
   }, [fetchData]);
 
-  async function login(event: React.FormEvent<HTMLFormElement>) {
+  async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
     try {
