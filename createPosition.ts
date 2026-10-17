@@ -4,6 +4,7 @@ import { IsomorphicFetchHttpLibrary, ServerConfiguration, CandlestickApi } from 
 import type { Account } from "./accounts";
 import { API_KEY_INDEX, BASE_URL } from "./config";
 import { MARKETS } from "./markets";
+import { nextClientOrderIndex } from "./orderIndex";
 
 type PositionLimits = { maxNotionalUsd: number };
 
@@ -53,7 +54,7 @@ export async function createPosition(
   // Preserve the requested direction. A LONG opens with a buy; a SHORT with a sell.
   return await client.createOrder({
     marketIndex: market.marketId,
-    clientOrderIndex: market.clientOrderIndex,
+    clientOrderIndex: nextClientOrderIndex(),
     baseAmount: Math.round(quantity * market.qtyDecimals),
     price: Math.round(limitPrice * market.priceDecimals),
     isAsk: side === "SHORT",
