@@ -1,0 +1,43 @@
+name: Paper Trading Cycle
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Four-hourly paper-only runs; scheduled workflows can be delayed by GitHub.
+    - cron: "17 */4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-trading-cycle
+  cancel-in-progress: false
+
+jobs:
+  paper-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      TRADING_MODE: paper
+      TRADING_ENABLED: "false"
+      PAPER_RUN_ONCE: "true"
+      PAPER_INITIAL_BALANCE_USD: "1000"
+      PAPER_TRADING_FEE_RATE: "0.0005"
+      MAX_POSITION_NOTIONAL_USD: "100"
+      MAX_ORDER_QUANTITY: "1"
+      MAX_ORDER_SLIPPAGE_FRACTION: "0.01"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bun run db:generate
+      - name: Apply database migrations
+        run: bun run db:migrate:deploy
+      - name: Run one paper-only cycle
+        run: bun run index.ts
