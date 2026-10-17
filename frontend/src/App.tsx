@@ -105,14 +105,14 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: modelDisplayName,
-          openRoutermodelName,
+          openRoutermodelName: openRouterModelName,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Could not add paper model");
       setModels((existing) => [...(existing ?? []), result.data].sort((a, b) => a.name.localeCompare(b.name)));
       setModelDisplayName("");
-      setOpenRoutermodelName("");
+      setOpenRouterModelName("");
     } catch (error) {
       setModelError(error instanceof Error ? error.message : "Could not add paper model");
     } finally {
