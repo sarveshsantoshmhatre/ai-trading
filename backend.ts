@@ -4,9 +4,6 @@ import { PrismaClient } from "./generated/prisma/client";
 import cors from "cors";
 import { resolve } from "node:path";
 
-// The dashboard/API process also runs the portfolio snapshot loop to keep hosting costs down.
-import "./priceTracker";
-
 const prisma = new PrismaClient();
 const app = express();
 app.use(express.json({ limit: "10kb" }));
