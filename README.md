@@ -75,7 +75,7 @@ bun run build
 
 ## Important remaining operational work
 
-- Existing `Models.lighterApiKey` values are stored in the database as plaintext. Migrate them to a secret manager or implement and execute an encryption migration before treating this as production-safe. Rotate any key that may have been exposed.
+- Existing `Models.lighterApiKey` values remain plaintext until you run `bun run secrets:encrypt` with `CREDENTIAL_ENCRYPTION_KEY` configured. Run this migration before starting the updated trading engine. Rotate any key that may have been exposed.
 - Confirm Lighter's `reduceOnly` encoding, market quantity/price precision, response schema, and candle timestamp units against the currently deployed SDK/API. Test with a non-funded account first.
 - Implement a proper historical backtest including fees, slippage, funding, partial fills, and liquidation. Paper trade before live trading.
 - Configure database backups, log redaction, monitoring/alerts, and an exchange-side emergency kill switch.
