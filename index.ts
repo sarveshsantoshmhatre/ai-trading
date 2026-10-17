@@ -229,6 +229,28 @@ async function main() {
         console.error("Paper cycle failed for model " + model.name + ":", error);
       }
     }
+
+    // Persist a mark-to-market snapshot after each scheduled paper cycle.
+    const snapshotPrices = Object.fromEntries(await Promise.all(
+      Object.entries(MARKETS).map(async ([symbol, market]) => {
+        const indicators = await getIndicators("5m", market.marketId);
+        const price = Number(indicators.midPrices.at(-1));
+        if (!Number.isFinite(price) || price <= 0) {
+          throw new Error("Missing valid portfolio mark price for " + symbol);
+        }
+        return [symbol, price] as const;
+      }),
+    ));
+    for (const model of models) {
+      try {
+        const portfolio = await getPaperPortfolio(prisma, model.id, snapshotPrices);
+        await prisma.portfolioSize.create({
+          data: { modelId: model.id, netPortfolio: portfolio.total },
+        });
+      } catch (error) {
+        console.error("Paper portfolio snapshot failed for model " + model.name + ":", error);
+      }
+    }
     return;
   }
 
@@ -278,4 +300,16 @@ async function runTradingLoop() {
   }
 }
 
-void runTradingLoop();
+if (process.env.PAPER_RUN_ONCE === "true") {
+  // Scheduler entry point: one paper cycle, then exit. Never permit live mode here.
+  if (getTradingMode() !== "paper") {
+    throw new Error("Scheduled runner is paper-only; TRADING_MODE must be paper");
+  }
+  try {
+    await main();
+  } finally {
+    await prisma.$disconnect();
+  }
+} else {
+  void runTradingLoop();
+}
