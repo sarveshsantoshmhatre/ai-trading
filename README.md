@@ -10,15 +10,7 @@ The bot now has basic application-side caps, serialized trading cycles, close-or
 
 ## Setup
 
-Install dependencies:
-
-```bash
-bun install
-bun run db:generate
-bun run db:migrate:deploy
-```
-
-Configure environment variables before starting any service:
+Configure environment variables before running setup commands or starting any service:
 
 - `DATABASE_URL`: PostgreSQL connection string.
 - `OPENROUTER_API_KEY`: OpenRouter API key.
@@ -34,6 +26,14 @@ Configure environment variables before starting any service:
 - `VITE_BACKEND_URL`: dashboard API base URL; defaults to http://localhost:3000.
 
 Generate a session secret with `openssl rand -base64 48`. Use a strong, unique dashboard password. In production, serve the frontend and API over HTTPS and configure exact allowed origins.
+
+Install dependencies and prepare the database:
+
+```bash
+bun install
+bun run db:generate
+bun run db:migrate:deploy
+```
 
 ## Encrypt existing exchange credentials
 
