@@ -4,9 +4,9 @@ AI-assisted crypto trading prototype using Bun/TypeScript, OpenRouter, the Light
 
 ## Safety status
 
-This is experimental software, not a validated profitable strategy. Do not enable live trading until the order behavior, exchange SDK semantics, risk limits, and backtests have been reviewed. The trading engine can submit real exchange orders.
+This is experimental software, not a validated profitable strategy. The default is `TRADING_MODE=paper`; simulated positions and fees are persisted in the database, and the paper engine does not use stored exchange credentials or send exchange orders. Paper fills use candle-derived mark prices plus modeled slippage and fees; they are not a reliable substitute for order-book fills or a historical backtest.
 
-The bot now has basic application-side caps, serialized trading cycles, close-order reconciliation, and dashboard password sessions. These do not replace independent monitoring, exchange-side risk controls, or a paper-trading phase.
+Real orders require all three explicit gates: `TRADING_MODE=live`, `TRADING_ENABLED=true`, and `LIVE_TRADING_ACK=I_ACCEPT_REAL_ORDERS`. Do not configure those gates until exchange behavior, order precision, reduce-only semantics, risk controls, and paper-trading results have been independently verified and a final live-trading decision has been made.
 
 ## Setup
 
@@ -17,16 +17,20 @@ Configure environment variables before running setup commands or starting any se
 - `MAX_POSITION_NOTIONAL_USD`: maximum notional value per new position; defaults to 100 USD.
 - `MAX_ORDER_QUANTITY`: maximum base quantity per order; defaults to 1.
 - `MAX_ORDER_SLIPPAGE_FRACTION`: allowed price offset for IOC orders; defaults to 0.01 and must be at most 0.05.
-- `TRADING_INTERVAL_MS`: minimum time between trading cycles; defaults to 300000.
-- `TRADING_ENABLED`: must be exactly `true` to enable order execution; defaults to disabled. Keep disabled until credentials, risk settings, exchange semantics, and paper-trading results are verified.
+- `TRADING_MODE`: `paper` by default; use only `paper` for initial deployment and testing.
+- `TRADING_INTERVAL_MS`: minimum time between model cycles; defaults to 3600000 (one hour) in paper mode to limit external model API usage.
+- `TRADING_ENABLED`: a live-order gate; must be exactly `true`, but does not enable live orders on its own.
+- `LIVE_TRADING_ACK`: must equal `I_ACCEPT_REAL_ORDERS` in addition to the other live gates; leave unset during paper testing.
+- `PAPER_INITIAL_BALANCE_USD`: simulated starting balance; defaults to 1000.
+- `PAPER_TRADING_FEE_RATE`: modeled fee per side; defaults to 0.0005 (0.05%).
 - `CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte key used to encrypt exchange credentials at rest. Generate with `openssl rand -base64 32` and store it outside the database.
 - `DASHBOARD_PASSWORD`: password for the private dashboard.
 - `DASHBOARD_SESSION_SECRET`: random secret of at least 32 characters used to sign sessions.
 - `DASHBOARD_ALLOWED_ORIGINS`: comma-separated exact frontend origins; defaults to http://localhost:5173.
 - `PORT`: dashboard API port; defaults to 3000.
-- `VITE_BACKEND_URL`: dashboard API base URL; defaults to http://localhost:3000.
+- `VITE_BACKEND_URL`: optional dashboard API base URL; defaults to same-origin for the hosted single-domain deployment.
 
-Generate a session secret with `openssl rand -base64 48`. Use a strong, unique dashboard password. In production, serve the frontend and API over HTTPS and configure exact allowed origins.
+Generate a session secret with a cryptographically secure generator and configure it as a protected hosting variable. Use a strong, unique dashboard password. In production, serve the dashboard over HTTPS. The dashboard/API container serves the built frontend and records portfolio snapshots itself, reducing the initial Railway setup to a database, an API/dashboard service, and a separate paper engine service.
 
 Install dependencies and prepare the database:
 
@@ -36,35 +40,38 @@ bun run db:generate
 bun run db:migrate:deploy
 ```
 
-## Encrypt existing exchange credentials
+## Deploy on Railway (paper mode only)
 
-Before starting the trading engine after deploying this change, configure `CREDENTIAL_ENCRYPTION_KEY` and run:
+Use the repository branch `deploy/production-readiness` after its CI checks pass.
 
-```bash
-bun run secrets:encrypt
-```
+1. Create a private Railway project and a PostgreSQL service.
+2. Create the API/dashboard service from this repository, using the root `Dockerfile`, with start command `bun run start:api`, health check path `/healthz`, and pre-deploy command `bun run db:migrate:deploy`.
+3. Create a second service from the same repository and Dockerfile with start command `bun run start`. Set `TRADING_MODE=paper`, `TRADING_ENABLED=false`, and `TRADING_INTERVAL_MS=3600000`.
+4. Configure protected service variables: `DATABASE_URL` as a reference to the Postgres service, `OPENROUTER_API_KEY`, `DASHBOARD_PASSWORD`, and `DASHBOARD_SESSION_SECRET` (at least 32 characters). Add an exact `DASHBOARD_ALLOWED_ORIGINS` if the frontend is later moved to a separate domain.
+5. Keep `TRADING_MODE=paper`; use the authenticated dashboard's Paper-trading models form to add a display name and an OpenRouter model ID. The account row has a non-secret sentinel for the exchange credential, which intentionally cannot be used to start live trading.
+6. Inspect model invocations, simulated entries/exits, modeled fees and portfolio snapshots before deciding whether the strategy deserves further backtesting.
 
-Back up the database first. The migration is idempotent: already encrypted credentials are skipped. Keep the encryption key backed up separately; losing it makes encrypted exchange credentials unrecoverable. Runtime trading refuses to use credentials that have not been encrypted.
+The engine calls the external OpenRouter API; those inference charges are separate from Railway hosting credits. Paper mode is simulated testing, not evidence of profitability.
+
+## Exchange credentials and live trading (not for initial deployment)
+
+Do not add exchange credentials or switch to live mode during this deployment-preparation phase. If live trading is ever approved later, first back up the database, set `CREDENTIAL_ENCRYPTION_KEY` as a protected variable, and run `bun run secrets:encrypt` in a controlled hosted one-off job. The migration is idempotent. Keep the key backed up separately; losing it makes encrypted credentials unrecoverable. Verify the current Lighter SDK/API behavior with a non-funded account before considering any live order path.
 
 ## Run
 
-Run the trading engine:
+Run the paper engine:
 
 ```bash
-bun run start
+TRADING_MODE=paper bun run start
 ```
 
-Run the dashboard API in a separate process:
+Run the API and dashboard (the API process starts portfolio tracking automatically):
 
 ```bash
 bun run start:api
 ```
 
-Run the portfolio tracker in a separate process if needed:
-
-```bash
-bun run start:tracker
-```
+The `start:tracker` script remains available for testing the tracker separately, but should not be started as a third hosted service when the API is already tracking snapshots.
 
 Build the frontend from its directory:
 
@@ -78,6 +85,6 @@ bun run build
 
 - Existing `Models.lighterApiKey` values remain plaintext until you run `bun run secrets:encrypt` with `CREDENTIAL_ENCRYPTION_KEY` configured. Run this migration before starting the updated trading engine. Rotate any key that may have been exposed.
 - Confirm Lighter's `reduceOnly` encoding, market quantity/price precision, response schema, and candle timestamp units against the currently deployed SDK/API. Test with a non-funded account first.
-- Implement a proper historical backtest including fees, slippage, funding, partial fills, and liquidation. Paper trade before live trading.
+- Implement historical backtests including funding, partial fills, liquidation, and robust market data before making any performance claims.
 - Configure database backups, log redaction, monitoring/alerts, and an exchange-side emergency kill switch.
-- Run `bun run typecheck`, `bun test`, and the frontend build in CI before deployment.
+- Run the CI pipeline and validate hosted API/model onboarding before relying on the deployment.
