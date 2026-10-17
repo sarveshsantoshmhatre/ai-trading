@@ -32,7 +32,12 @@ function validSession(req: express.Request) {
   const rawCookie = cookieHeader.split(";").map((part) => part.trim())
     .find((part) => part.startsWith(SESSION_COOKIE + "="));
   if (!rawCookie) return false;
-  const token = decodeURIComponent(rawCookie.slice(SESSION_COOKIE.length + 1));
+  let token: string;
+  try {
+    token = decodeURIComponent(rawCookie.slice(SESSION_COOKIE.length + 1));
+  } catch {
+    return false;
+  }
   const separator = token.indexOf(".");
   if (separator < 1) return false;
   const expiry = token.slice(0, separator);
@@ -112,9 +117,7 @@ app.get("/performance", requireAuth, async (_req, res) => {
       include: { model: { select: { name: true } } },
       take: 25_000,
     });
-    timeseriesDataGlobal = data;
-    lastUpdatedGlobal = new Date();
-    res.json({ data, lastUpdated: lastUpdatedGlobal });
+    res.json({ data, lastUpdated: new Date() });
   } catch (error) {
     console.error("Error loading performance data:", error);
     res.status(500).json({ error: "Unable to load performance data" });
