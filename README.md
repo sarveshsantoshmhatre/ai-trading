@@ -40,18 +40,9 @@ bun run db:generate
 bun run db:migrate:deploy
 ```
 
-## Deploy on Railway (paper mode only)
+## Free hosting deployment
 
-Use the repository branch `deploy/production-readiness` after its CI checks pass.
-
-1. Create a private Railway project and a PostgreSQL service.
-2. Create the API/dashboard service from this repository, using the root `Dockerfile`, with start command `bun run start:api`, health check path `/healthz`, and pre-deploy command `bun run db:migrate:deploy`.
-3. Create a second service from the same repository and Dockerfile with start command `bun run start`. Set `TRADING_MODE=paper`, `TRADING_ENABLED=false`, and `TRADING_INTERVAL_MS=3600000`.
-4. Configure protected service variables: `DATABASE_URL` as a reference to the Postgres service, `OPENROUTER_API_KEY`, `DASHBOARD_PASSWORD`, and `DASHBOARD_SESSION_SECRET` (at least 32 characters). Add an exact `DASHBOARD_ALLOWED_ORIGINS` if the frontend is later moved to a separate domain.
-5. Keep `TRADING_MODE=paper`; use the authenticated dashboard's Paper-trading models form to add a display name and an OpenRouter model ID. The account row has a non-secret sentinel for the exchange credential, which intentionally cannot be used to start live trading.
-6. Inspect model invocations, simulated entries/exits, modeled fees and portfolio snapshots before deciding whether the strategy deserves further backtesting.
-
-The engine calls the external OpenRouter API; those inference charges are separate from Railway hosting credits. Paper mode is simulated testing, not evidence of profitability.
+See [`DEPLOYMENT_FREE.md`](./DEPLOYMENT_FREE.md) for the selected free-tier architecture and setup instructions: Render Free for the dashboard/API, Supabase Free Postgres for persistent data, and a scheduled GitHub Actions workflow for one-shot paper cycles. The deployment is paper-only and does not require exchange credentials. Keep `TRADING_MODE=paper` and `TRADING_ENABLED=false`.
 
 ## Exchange credentials and live trading (not for initial deployment)
 
