@@ -24,9 +24,11 @@ export async function getIndicators(
   }
   const ordered = [...candles].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
   const prices = getMidPrices(ordered);
-  const latestTimestamp = Number(ordered.at(-1)?.timestamp);
+  const rawTimestamp = Number(ordered.at(-1)?.timestamp);
+  // Some exchange APIs express candle timestamps in seconds and others in milliseconds.
+  const latestTimestampMs = rawTimestamp < 1_000_000_000_000 ? rawTimestamp * 1000 : rawTimestamp;
   const staleAfterMs = (duration === "5m" ? 15 : 12 * 60) * 60_000;
-  if (!Number.isFinite(latestTimestamp) || Date.now() - latestTimestamp > staleAfterMs) {
+  if (!Number.isFinite(latestTimestampMs) || latestTimestampMs <= 0 || Date.now() - latestTimestampMs > staleAfterMs) {
     throw new Error("Stale candle data for market " + marketId + " (" + duration + ")");
   }
   const macd = getMacd(prices);
