@@ -5,6 +5,7 @@ import type { Account } from "./accounts";
 import { API_KEY_INDEX, BASE_URL } from "./config";
 import { MARKETS } from "./markets";
 import { nextClientOrderIndex } from "./orderIndex";
+import { assertLiveTradingAuthorized } from "./paperTrading";
 
 type PositionLimits = { maxNotionalUsd: number };
 
@@ -15,6 +16,8 @@ export async function createPosition(
   quantity: number,
   limits: PositionLimits,
 ) {
+  // Defense in depth: this method must never submit real orders in paper mode.
+  assertLiveTradingAuthorized();
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Order quantity must be positive and finite");
   if (!Number.isFinite(limits.maxNotionalUsd) || limits.maxNotionalUsd <= 0) throw new Error("Invalid maxNotionalUsd");
   const market = MARKETS[symbol as keyof typeof MARKETS];
