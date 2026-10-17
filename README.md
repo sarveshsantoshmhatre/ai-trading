@@ -18,6 +18,7 @@ Configure environment variables before running setup commands or starting any se
 - `MAX_ORDER_QUANTITY`: maximum base quantity per order; defaults to 1.
 - `MAX_ORDER_SLIPPAGE_FRACTION`: allowed price offset for IOC orders; defaults to 0.01 and must be at most 0.05.
 - `TRADING_INTERVAL_MS`: minimum time between trading cycles; defaults to 300000.
+- `TRADING_ENABLED`: must be exactly `true` to enable order execution; defaults to disabled. Keep disabled until credentials, risk settings, exchange semantics, and paper-trading results are verified.
 - `CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte key used to encrypt exchange credentials at rest. Generate with `openssl rand -base64 32` and store it outside the database.
 - `DASHBOARD_PASSWORD`: password for the private dashboard.
 - `DASHBOARD_SESSION_SECRET`: random secret of at least 32 characters used to sign sessions.
