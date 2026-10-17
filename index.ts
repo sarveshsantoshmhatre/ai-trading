@@ -110,6 +110,10 @@ export const invokeAgent = async (account: Account) => {
             throw new Error("An open position already exists. Close and reconcile it before opening another.");
           }
           if (isPaperMode()) {
+            const markPrice = latestPrices[symbol];
+            if (typeof markPrice !== "number" || !Number.isFinite(markPrice) || markPrice <= 0) {
+              throw new Error("Missing valid paper mark price for " + symbol);
+            }
             return await openPaperPosition({
               prisma,
               invocationId: modelInvocation.id,
@@ -117,7 +121,7 @@ export const invokeAgent = async (account: Account) => {
               symbol,
               side,
               quantity,
-              markPrice: latestPrices[symbol],
+              markPrice,
               maxNotionalUsd: MAX_POSITION_NOTIONAL_USD,
             });
           }
