@@ -9,6 +9,7 @@ import { MARKETS } from "./markets";
 import { createPosition } from "./createPosition";
 import { cancelAllOrders } from "./cancelOrder";
 import { PrismaClient, ToolCallType } from "./generated/prisma/client";
+import { decryptSecret } from "./credentialCrypto";
 
 const prisma = new PrismaClient();
 const MAX_POSITION_NOTIONAL_USD = Number(process.env.MAX_POSITION_NOTIONAL_USD ?? "100");
@@ -157,7 +158,7 @@ async function main() {
   for (const model of models) {
     try {
       await invokeAgent({
-        apiKey: model.lighterApiKey,
+        apiKey: decryptSecret(model.lighterApiKey),
         modelName: model.openRoutermodelName,
         name: model.name,
         invocationCount: model.invocationCount,
