@@ -3,8 +3,8 @@ name: Paper Trading Cycle
 on:
   workflow_dispatch:
   schedule:
-    # Four-hourly paper-only runs; scheduled workflows can be delayed by GitHub.
-    - cron: "17 */4 * * *"
+    # Hourly paper-only runs; scheduled workflows can be delayed by GitHub.
+    - cron: "17 * * * *"
 
 permissions:
   contents: read
