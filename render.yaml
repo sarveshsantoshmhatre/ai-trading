@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: ai-trading-paper-dashboard
+    runtime: docker
+    plan: free
+    dockerCommand: bun run start:api
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRADING_MODE
+        value: paper
+      - key: TRADING_ENABLED
+        value: "false"
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: DASHBOARD_SESSION_SECRET
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PAPER_INITIAL_BALANCE_USD
+        value: "1000"
+      - key: PAPER_TRADING_FEE_RATE
+        value: "0.0005"
+      - key: MAX_POSITION_NOTIONAL_USD
+        value: "100"
+      - key: MAX_ORDER_QUANTITY
+        value: "1"
+      - key: MAX_ORDER_SLIPPAGE_FRACTION
+        value: "0.01"

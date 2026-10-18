@@ -6,8 +6,11 @@ import { MARKETS } from "./markets";
 import { nextClientOrderIndex } from "./orderIndex";
 import { getOpenPositions } from "./openPositions";
 import { CandlestickApi, IsomorphicFetchHttpLibrary, ServerConfiguration } from "./lighter-sdk-ts/generated";
+import { assertLiveTradingAuthorized } from "./paperTrading";
 
 export async function cancelAllOrders(account: Account) {
+  // Defense in depth: never send close orders unless live trading is explicitly authorized.
+  assertLiveTradingAuthorized();
   const client = await SignerClient.create({
     url: BASE_URL,
     privateKey: account.apiKey,

@@ -2,10 +2,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { PrismaClient } from "./generated/prisma/client";
 import cors from "cors";
+import { resolve } from "node:path";
 
 const prisma = new PrismaClient();
 const app = express();
 app.use(express.json({ limit: "10kb" }));
+app.use(express.static(resolve(process.cwd(), "frontend/dist"), { maxAge: "1h" }));
 
 const allowedOrigins = (process.env.DASHBOARD_ALLOWED_ORIGINS ?? "http://localhost:5173")
   .split(",").map((origin) => origin.trim()).filter(Boolean);
@@ -105,6 +107,69 @@ app.post("/auth/logout", (req, res) => {
 });
 
 app.get("/auth/me", requireAuth, (_req, res) => res.json({ authenticated: true }));
+
+// A database-backed health check for the hosted service's health probe.
+app.get("/healthz", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ok" });
+  } catch {
+    res.status(503).json({ status: "unavailable" });
+  }
+});
+
+app.get("/models", requireAuth, async (_req, res) => {
+  try {
+    const models = await prisma.models.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, openRoutermodelName: true, invocationCount: true },
+    });
+    res.json({ data: models });
+  } catch (error) {
+    console.error("Error loading models:", error);
+    res.status(500).json({ error: "Unable to load models" });
+  }
+});
+
+app.post("/models", requireAuth, async (req, res) => {
+  if ((process.env.TRADING_MODE ?? "paper") !== "paper") {
+    res.status(403).json({ error: "Model onboarding is restricted to paper mode" });
+    return;
+  }
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const openRoutermodelName = typeof req.body?.openRoutermodelName === "string"
+    ? req.body.openRoutermodelName.trim() : "";
+  if (name.length < 1 || name.length > 80) {
+    res.status(400).json({ error: "Display name must contain 1 to 80 characters" });
+    return;
+  }
+  if (openRoutermodelName.length < 1 || openRoutermodelName.length > 160 ||
+      !/^[a-zA-Z0-9._/-]+$/.test(openRoutermodelName)) {
+    res.status(400).json({ error: "Enter a valid OpenRouter model identifier" });
+    return;
+  }
+  try {
+    const model = await prisma.models.create({
+      data: {
+        name,
+        openRoutermodelName,
+        // Non-secret sentinel. Paper mode never reads this field and the encrypted-key
+        // requirement intentionally prevents this record from working in live mode.
+        lighterApiKey: "PAPER_MODE_NO_CREDENTIALS",
+        accountIndex: "paper",
+      },
+      select: { id: true, name: true, openRoutermodelName: true, invocationCount: true },
+    });
+    res.status(201).json({ data: model });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      res.status(409).json({ error: "A model with that display name already exists" });
+      return;
+    }
+    console.error("Error creating paper model:", error);
+    res.status(500).json({ error: "Unable to create paper model" });
+  }
+});
 
 app.get("/performance", requireAuth, async (_req, res) => {
   try {

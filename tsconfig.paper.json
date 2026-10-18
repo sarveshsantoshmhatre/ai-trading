@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": false,
+    "noUncheckedIndexedAccess": true,
+    "types": ["bun"]
+  },
+  "files": [
+    "paperTrading.ts",
+    "paperTrading.test.ts",
+    "indicators.ts",
+    "indicators.test.ts",
+    "orderIndex.ts",
+    "credentialCrypto.ts",
+    "getPortfolio.ts"
+  ]
+}
