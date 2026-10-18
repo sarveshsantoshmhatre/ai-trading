@@ -37,6 +37,18 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Generate Prisma client
         run: bun run db:generate
+      - name: Baseline existing Supabase schema
+        shell: bash
+        run: |
+          # Supabase already contains the current schema. Mark its historical
+          # schema migrations as applied instead of replaying destructive DDL.
+          for migration in \
+            20251029012844_init \
+            20251029012930_remove_unnecessary_field \
+            20251029014406_new_schemna \
+            20251029014429_add_fields; do
+            bunx prisma migrate resolve --applied "$migration" || true
+          done
       - name: Apply database migrations
         run: bun run db:migrate:deploy
       - name: Run one paper-only cycle
