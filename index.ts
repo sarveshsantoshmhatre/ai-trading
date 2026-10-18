@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { streamText } from "ai";
+import { stepCountIs, streamText } from "ai";
 import { z } from "zod";
 import { PROMPT } from "./prompt";
 import { type Account } from "./accounts";
@@ -53,6 +53,8 @@ export const invokeAgent = async (account: Account) => {
       latestPrice,
       block: [
         "MARKET - " + marketSlug,
+        "Current mark price: $" + latestPrice,
+        "Maximum allowed quantity at this price: " + Math.min(MAX_ORDER_QUANTITY, MAX_POSITION_NOTIONAL_USD / latestPrice).toFixed(6) + " (notional cap $" + MAX_POSITION_NOTIONAL_USD + ")",
         "Intraday (5m candles; oldest to newest):",
         "Mid prices - [" + intraday.midPrices.join(",") + "]",
         "EMA20 - [" + intraday.ema20s.join(",") + "]",
@@ -91,6 +93,7 @@ export const invokeAgent = async (account: Account) => {
   const response = streamText({
     model: openrouter(account.modelName),
     prompt: enrichedPrompt,
+    stopWhen: stepCountIs(3),
     tools: {
       createPosition: {
         description: "Open a position subject to application risk limits",
@@ -187,6 +190,12 @@ export const invokeAgent = async (account: Account) => {
   try {
     await response.consumeStream();
     const responseText = (await response.text).trim();
+    const steps = await response.steps;
+    const toolCalls = steps.flatMap((step) => step.toolCalls ?? []);
+    console.info("Model " + account.name + ": " + steps.length + " AI step(s), " + toolCalls.length + " tool call(s).");
+    if (toolCalls.length === 0) {
+      console.warn("Model " + account.name + " returned analysis without invoking a trading tool; no position was opened or closed.");
+    }
     await prisma.models.update({
       where: { id: account.id },
       data: { invocationCount: { increment: 1 } },
